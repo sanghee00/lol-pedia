@@ -36,7 +36,7 @@
 
 ## 아키텍처
 
-![Architecture](![img.png](img.png))
+![Architecture](img.png)
 
 ---
 
