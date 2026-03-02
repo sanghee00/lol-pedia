@@ -36,7 +36,7 @@
 
 ## 아키텍처
 
-![Architecture](https://www.notion.so/image/attachment%3Ad61b8614-c229-4c83-b34a-d7b72325d64e%3Acd8b1376-8364-42c1-8bdc-7d81fa90a8d9.png?table=block&id=31684576-5396-800e-bfa2-f67629e1e161&spaceId=dbc105ba-4b63-44eb-86ff-fb345594947e&width=2000&userId=1d43d2fb-30f8-4906-83a1-f0143e1e6b2d&cache=v2)
+![Architecture](![img.png](img.png))
 
 ---
 
