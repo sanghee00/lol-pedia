@@ -1,0 +1,83 @@
+name: Deploy To EC2
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Github Repository 파일 불러오기
+        uses: actions/checkout@v4
+
+      - name: JDK 21버전 설치
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: AWS Resource에 접근할 수 있게 AWS credentials 설정
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-region: ap-northeast-2
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
+      - name: AWS SSM에서 application.yml 가져오기
+        run: |
+          mkdir -p ./src/main/resources
+          aws ssm get-parameter \
+            --name "/lol-pedia-server/production/application-yml" \
+            --with-decryption \
+            --query "Parameter.Value" \
+            --output text > ./src/main/resources/application.yml
+          
+      - name: 설정 파일 생성 확인
+        run: ls -al ./src/main/resources/application.yml
+
+      - name: AWS SSM에서 .env 파일 가져오기
+        run: |
+          aws ssm get-parameter \
+            --name "/lol-pedia-server/production/.env" \
+            --with-decryption \
+            --query "Parameter.Value" \
+            --output text > ./.env
+          
+      - name: ECR에 로그인하기
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: 권한 부여 (gradlew 실행을 위해)
+        run: chmod +x ./gradlew
+
+      - name: 스프링 프로젝트 빌드 (JAR 생성)
+        run: ./gradlew clean build -x test
+
+      - name: Docker 이미지 생성
+        run: docker build -t lol-pedia-server .
+
+      - name: Docker 이미지에 Tag 붙이기
+        run: docker tag lol-pedia-server ${{ steps.login-ecr.outputs.registry }}/lol-pedia:latest
+
+      - name: ECR에 Docker 이미지 Push하기
+        run: docker push ${{ steps.login-ecr.outputs.registry }}/lol-pedia:latest
+
+      - name: 스크립트 내 ECR 주소 치환
+        run: |
+          sed -i "s|{ECR_URL}|${{ steps.login-ecr.outputs.registry }}|g" scripts/start-server.sh
+
+      - name: 압축하기
+        run: tar -czvf $GITHUB_SHA.tar.gz appspec.yml scripts .env
+
+      - name: S3에 프로젝트 폴더 업로드하기
+        run: aws s3 cp --region ap-northeast-2 ./$GITHUB_SHA.tar.gz s3://lol-pedia-deploy-bucket/$GITHUB_SHA.tar.gz
+
+      - name: Code Deploy를 활용해 EC2에 프로젝트 코드 배포
+        run: |
+          aws deploy create-deployment \
+            --application-name lol-pedia-deploy-app \
+            --deployment-config-name CodeDeployDefault.AllAtOnce \
+            --deployment-group-name lol-pedia-deploy-group \
+            --s3-location bucket=lol-pedia-deploy-bucket,bundleType=tgz,key=$GITHUB_SHA.tar.gz
